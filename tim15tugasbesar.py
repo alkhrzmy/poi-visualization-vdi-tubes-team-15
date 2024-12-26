@@ -212,6 +212,7 @@ def scatter_cost_profit(costProfCat):
     fig.tight_layout()
     return fig
 
+
 def line_trend_visits(userVisits):
     df_filtered = userVisits[userVisits['dateTaken'].dt.year >= 2005].copy()
     df_filtered['Year_Month'] = df_filtered['dateTaken'].dt.to_period('M')
@@ -219,55 +220,204 @@ def line_trend_visits(userVisits):
     monthly_visits['Year_Month'] = monthly_visits['Year_Month'].astype(str)
     monthly_visits['Year_Month'] = pd.to_datetime(monthly_visits['Year_Month'])
     
-    fig, ax = plt.subplots(figsize=(12,6))
-    sns.lineplot(data=monthly_visits, x='Year_Month', y='Visit_Counts', hue='cities', marker='o', ax=ax)
-    ax.set_title('Jumlah Kunjungan per Bulan di Setiap Kota (2005 ke atas)')
-    ax.set_xlabel('Waktu')
-    ax.set_ylabel('Jumlah Kunjungan')
-    ax.legend(title='Kota')
-    plt.xticks(rotation=45)
-    fig.tight_layout()
+    fig = px.line(monthly_visits, 
+                  x='Year_Month', 
+                  y='Visit_Counts',
+                  color='cities',
+                  markers=True,
+                  title='Jumlah Kunjungan per Bulan di Setiap Kota (2005 ke atas)')
+    
+    fig.update_layout(
+        xaxis_title='Waktu',
+        yaxis_title='Jumlah Kunjungan',
+        legend_title='Kota',
+        hovermode='x unified'
+    )
+    
     return fig
 
 def bar_profit_category(costProfCat):
+    # Calculate average profit per category 
     avg_profit = costProfCat.groupby('category')['profit'].mean().reset_index()
-    avg_profit = avg_profit.sort_values('profit', ascending=False)
-    fig, ax = plt.subplots(figsize=(12,6))
-    sns.barplot(data=avg_profit, x='profit', y='category', palette='Spectral', ax=ax)
-    ax.set_title('Keuntungan Rata-rata per Kategori POI')
-    ax.set_xlabel('Keuntungan Rata-rata')
-    ax.set_ylabel('Kategori POI')
-    fig.tight_layout()
-    return fig
+    avg_profit = avg_profit.sort_values('profit', ascending=True) # Changed to ascending=True for largest on top
 
-def map_city(poiList, city='Toro'):
-    city_poi = poiList[poiList['cities'] == city]
-    fig = px.scatter_mapbox(
-        city_poi,
-        lat='lat',
-        lon='long',
-        hover_name='poiName',
-        hover_data=['theme'],
-        zoom=12,
-        mapbox_style='carto-positron',
-        title=f'Lokasi POI di Kota {city}'
+    # Create interactive bar chart using plotly
+    fig = px.bar(
+        avg_profit,
+        x='profit',
+        y='category',
+        orientation='h', # horizontal bars
+        title='Keuntungan Rata-rata per Kategori POI',
+        labels={
+            'profit': 'Keuntungan Rata-rata',
+            'category': 'Kategori POI'
+        },
+        # Add color gradient based on profit
+        color='profit',
+        color_continuous_scale='Spectral_r'
     )
-    fig.update_layout(margin={"r":0,"t":30,"l":0,"b":0})
+
+    # Update layout
+    fig.update_layout(
+        showlegend=False,
+        xaxis_title='Keuntungan Rata-rata',
+        yaxis_title='Kategori POI',
+        height=500
+    )
+
     return fig
 
-def pie_theme_city(userVisits, city='Toro'):
+def map_city(poiList, userVisits, city='Toro'):  # Tambahkan userVisits sebagai parameter
+    # Filter data untuk kota yang dipilih
+    city_poi = poiList[poiList['cities'] == city].copy()
+    city_data = userVisits[userVisits['cities'] == city]
+    
+    # Pastikan koordinat dalam format numerik
+    city_poi['lat'] = pd.to_numeric(city_poi['lat'], errors='coerce')
+    city_poi['long'] = pd.to_numeric(city_poi['long'], errors='coerce')
+
+    # Define fixed color mapping for themes
+    theme_colors = {
+        'Amusement': '#1f77b4',     # Blue
+        'Architectural': '#ff7f0e',  # Orange  
+        'Beach': '#2ca02c',         # Green
+        'Building': '#d62728',      # Red
+        'Cultural': '#9467bd',      # Purple
+        'Education': '#8c564b',     # Brown
+        'Entertainment': '#e377c2',  # Pink
+        'Historical': '#7f7f7f',    # Gray 
+        'Museum': '#bcbd22',        # Olive
+        'Palace': '#17becf',        # Cyan
+        'Park': '#98df8a',          # Light green
+        'Precinct': '#ff9896',      # Light red
+        'Religion': '#c5b0d5',      # Light purple
+        'Religious': '#c49c94',     # Light brown
+        'Shopping': '#f7b6d2',      # Light pink
+        'Sport': '#c7c7c7',         # Light gray
+        'Structure': '#dbdb8d',     # Light olive
+        'Transport': '#9edae5',     # Light cyan
+        'Zoo': '#393b79'           # Dark blue
+    }
+    
+    # Menambahkan kolom warna berdasarkan tema
+    city_poi['color'] = city_poi['theme'].map(theme_colors)
     city_data = userVisits[userVisits['cities'] == city]
     city_poi_freq = city_data[['poiID', 'poiTheme', 'poiFreq']].drop_duplicates()
+    # Menggabungkan city_poi dengan city_poi_freq untuk mendapatkan 'poiFreq'
+    city_poi_merged = pd.merge(city_poi, city_poi_freq[['poiID', 'poiFreq']], on='poiID', how='left')
+
+    # Membuat teks label untuk marker dengan informasi frekuensi
+    city_poi['text'] = city_poi_merged.apply(
+        lambda row: f"<b>{row['poiName']}</b><br>Theme: {row['theme']}<br>Visit Frequency: {row['poiFreq']}", 
+        axis=1)
+    
+    # Membuat visualisasi peta
+    map_trace = go.Scattermapbox(
+        lat=city_poi['lat'],
+        lon=city_poi['long'],
+        mode='markers+text',
+        marker=go.scattermapbox.Marker(
+            size=10,
+            color=city_poi['color']
+        ),
+        text=city_poi['text'],
+        textposition='top right',
+        hovertemplate="%{text}<extra></extra>",  # Updated hover template
+        name='POI',
+        showlegend=False
+    )
+
+    # Membuat figure dengan subplot
+    fig = make_subplots(
+        rows=1, cols=1,
+        specs=[[{"type": "mapbox"}]]
+    )
+
+    # Menambahkan trace ke figure
+    fig.add_trace(map_trace)
+
+    # Mengatur layout
+    fig.update_layout(
+        title=f"Lokasi POI di Kota {city}",
+        mapbox=dict(
+            style='carto-positron',
+            center=dict(
+                lat=city_poi['lat'].median(),
+                lon=city_poi['long'].median()
+            ),
+            zoom=12
+        ),
+        showlegend=True,
+        margin={"r":0,"t":30,"l":0,"b":0},
+        width=800,
+        height=600
+    )
+
+    return fig
+
+def pie_theme_city(userVisits, selected_city='Toro'):
+    # Filter data berdasarkan kota yang dipilih
+    city_data = userVisits[userVisits['cities'] == selected_city]
+    city_poi_freq = city_data[['poiID', 'poiTheme', 'poiFreq']].drop_duplicates()
     theme_freq = city_poi_freq.groupby('poiTheme')['poiFreq'].sum().reset_index()
-    fig, ax = plt.subplots(figsize=(8,8))
-    ax.pie(theme_freq['poiFreq'], 
-            labels=theme_freq['poiTheme'], 
-            autopct='%1.1f%%',
-            startangle=140, 
-            colors=sns.color_palette('pastel'))
-    ax.set_title(f'Distribusi Tema POI di Kota {city}')
-    ax.axis('equal')
-    fig.tight_layout()
+    
+    # Use same color mapping as map function
+    theme_colors = {
+        'Amusement': '#1f77b4',     # Blue
+        'Architectural': '#ff7f0e',  # Orange  
+        'Beach': '#2ca02c',         # Green
+        'Building': '#d62728',      # Red
+        'Cultural': '#9467bd',      # Purple
+        'Education': '#8c564b',     # Brown
+        'Entertainment': '#e377c2',  # Pink
+        'Historical': '#7f7f7f',    # Gray 
+        'Museum': '#bcbd22',        # Olive
+        'Palace': '#17becf',        # Cyan
+        'Park': '#98df8a',          # Light green
+        'Precinct': '#ff9896',      # Light red
+        'Religion': '#c5b0d5',      # Light purple
+        'Religious': '#c49c94',     # Light brown
+        'Shopping': '#f7b6d2',      # Light pink
+        'Sport': '#c7c7c7',         # Light gray
+        'Structure': '#dbdb8d',     # Light olive
+        'Transport': '#9edae5',     # Light cyan
+        'Zoo': '#393b79'           # Dark blue
+    }
+    
+    # Map colors to themes in data
+    colors = [theme_colors[theme] for theme in theme_freq['poiTheme']]
+    
+    # Membuat pie chart interaktif dengan Plotly
+    fig = go.Figure(data=[go.Pie(
+        labels=theme_freq['poiTheme'],
+        values=theme_freq['poiFreq'],
+        hole=0.3,
+        marker_colors=colors
+    )])
+    
+    # Update layout
+    fig.update_layout(
+        title=f'Distribusi Tema POI di Kota {selected_city}',
+        showlegend=True,
+        width=800,
+        height=600,
+        annotations=[dict(
+            text='Tema POI',
+            x=0.5,
+            y=0.5,
+            font_size=20,
+            showarrow=False
+        )]
+    )
+    
+    # Add hover info
+    fig.update_traces(
+        hoverinfo='label+percent+value',
+        textinfo='percent',
+        textfont_size=14,
+        textposition='inside'
+    )
+    
     return fig
 
 def create_poi_network(costProfCat, poiList, selected_city):
@@ -579,81 +729,185 @@ def main():
                         Stacked bar chart yang menunjukkan persentase kunjungan untuk setiap tema POI, dibedakan antara weekday dan weekend.
                         """)
 
+            st.write("")
+            st.progress(100, text="")
+            st.write("")
+
+            #fifth row
+            e1, e2, e3, e4, e5 = st.columns((0.42,0.01,0.12,0.01,0.42))
+            with e1:
+                st.subheader("Tren Kunjungan Waktu")
+                
+                # Add multiselect for cities
+                default_cities = ['Edin', 'Buda', 'Delh'] # Default 3 cities
+                selected_cities = st.multiselect(
+                    "Pilih Kota yang Akan Ditampilkan",
+                    options=userVisits['cities'].unique(),
+                    default=default_cities,
+                    help="Pilih satu atau lebih kota untuk melihat tren kunjungannya"
+                )
+                
+                # Filter data based on selected cities
+                if selected_cities:
+                    filtered_visits = userVisits[userVisits['cities'].isin(selected_cities)]
+                    fig = line_trend_visits(filtered_visits)
+                    st.plotly_chart(fig)
+                    
+                    with st.expander("ℹ️ Informasi Grafik", expanded=False):
+                        st.markdown(
+                            """
+                            ####  Pertanyaan:
+                            Bagaimana pola tren kunjungan POI dari waktu ke waktu di kota-kota yang dipilih?
+                            
+                            #### Visualisasi: 
+                            Line chart yang menunjukkan jumlah kunjungan per bulan untuk setiap kota yang dipilih.
+                            """)
+                else:
+                    st.warning("Silakan pilih minimal satu kota untuk menampilkan tren kunjungan.")
+            with e2:
+                st.write("")
+            with e3:
+                # Calculate percentage of visits for each city
+                total_visits = userVisits['poiID'].count()
+                city_visits = userVisits.groupby('cities')['poiID'].count()
+                city_percentages = (city_visits / total_visits * 100).round(1)
+
+                # Calculate most profitable categories
+                avg_profits = costProfCat.groupby('category')['profit'].mean()
+                top_category = avg_profits.idxmax()
+                top_profit = avg_profits.max()
+
+                # Display metrics
+                st.metric("Kota Terpopuler", 
+                          f"{city_visits.idxmax()}", 
+                          f"{city_percentages.max()}% (total kunjungan)",
+                          help="Kota dengan jumlah kunjungan tertinggi")
+
+                st.metric("Kategori Teruntung", 
+                          f"{top_category}", 
+                          f"Profit: {top_profit:.2f}",
+                          help="Kategori POI dengan rata-rata profit tertinggi")
+
+                st.metric("Rasio Weekend/Weekday",
+                          f"{(userVisits['datetime'].dt.dayofweek.isin([5,6]).mean() * 100):.1f}%",
+                          help="Persentase kunjungan yang terjadi di akhir pekan")
+            with e4:
+                st.write("")
+            with e5:
+                st.subheader("Bar Profit Kategori")
+                fig = bar_profit_category(costProfCat)
+                st.plotly_chart(fig)
+                with st.expander("ℹ️ Informasi Grafik", expanded=False):
+                    st.markdown(
+                        """
+                        ####  Pertanyaan:
+                        Bagaimana profit rata-rata per kategori POI?
+
+                        #### Visualisasi: 
+                        Bar chart yang menunjukkan profit rata-rata per kategori POI.
+                        """)
+            
+            st.write("")
+            st.progress(100, text="")
+            st.write("")
+        
+            #sixth row
+            f1, f2, f3 = st.columns((0.12,0.76,0.12))
+            with f1:   
+                st.write("")
+            with f2:
+                st.subheader("Lokasi dan Distribusi POI")
+                selected_city = st.selectbox(
+                    "Pilih Kota untuk Melihat POI",
+                    poiList['cities'].unique(),
+                    key='map_city_select'
+                )
+                
+                col1, col2 = st.columns(2)
+                
+                if selected_city:
+                    with col1:
+                        fig = map_city(poiList, userVisits, selected_city)  # Tambahkan userVisits sebagai argument
+                        st.plotly_chart(fig, use_container_width=True)
+                        with st.expander("ℹ️ Informasi Grafik", expanded=False):
+                            st.markdown("""
+                                #### Pertanyaan:
+                                Bagaimana distribusi lokasi POI di kota yang dipilih?
+                                
+                                #### Visualisasi:
+                                Peta interaktif yang menunjukkan lokasi POI di kota tertentu.
+                            """)
+                            
+                    with col2:
+                        fig = pie_theme_city(userVisits, selected_city)
+                        st.plotly_chart(fig, use_container_width=True)
+                        with st.expander("ℹ️ Informasi Grafik", expanded=False):
+                            st.markdown("""
+                                #### Pertanyaan:
+                                Bagaimana distribusi tema POI di kota yang dipilih?
+                                
+                                #### Visualisasi:
+                                Pie chart yang menunjukkan proporsi tema POI di kota tertentu.
+                            """)
+            with f3:
+                st.write("")
+
+            st.write("")
+            st.progress(100, text="")
+            st.write("")
+
         elif choice == "About Us":
-            st.subheader("Info Data userVisits")
-            st.write(userVisits.info(verbose=True))
-            st.subheader("Info Data poiList") 
-            st.write(poiList.info(verbose=True))
-            st.subheader("Info Data costProfCat")
-            st.write(costProfCat.info(verbose=True))
+            st.header("About Dataset")
+            st.markdown("""
+            ### Flickr User-POI Visits Dataset
+            
+            Dataset ini terdiri dari kumpulan pengguna dan kunjungan mereka ke berbagai tempat menarik (POI) di delapan kota. Kunjungan pengguna-POI ditentukan berdasarkan foto YFCC100M Flickr yang diberi geotag yang:
+            
+            1. Dipetakan ke lokasi POI dan kategori POI tertentu
+            2. Dikelompokkan menjadi urutan perjalanan individu (kunjungan POI pengguna berurutan yang berbeda < 8 jam)
+            
+            #### Deskripsi File dan Statistik Dataset:
+            
+            Semua kunjungan POI pengguna di setiap kota disimpan dalam satu file csv yang berisi kolom/bidang berikut:
+            
+            - **photoID**: pengidentifikasi foto berdasarkan Flickr
+            - **userID**: pengidentifikasi pengguna berdasarkan Flickr 
+            - **dateTaken**: tanggal/waktu foto diambil (format timestamp unix)
+            - **poiID**: pengidentifikasi tempat menarik (foto Flickr dipetakan ke POI berdasarkan lat/long mereka)
+            - **poiTheme**: kategori POI (mis., Taman, Museum, Budaya, dll)
+            - **poiFreq**: berapa kali POI ini telah dikunjungi
+            - **seqID**: nomor urut perjalanan (kunjungan POI berurutan oleh pengguna yang sama yang berbeda < 8 jam dikelompokkan sebagai satu urutan perjalanan)
+            """)
 
-            st.subheader("Cek Missing Values & Duplicates")
-            col1, col2, col3 = st.columns(3)
+            st.markdown("""
+            #### Referensi / Sitasi:
+            
+            Jika Anda menggunakan dataset ini, silakan kutip makalah berikut:
+            
+            1. Kwan Hui Lim, Jeffrey Chan, Christopher Leckie and Shanika Karunasekera. "Personalized Tour Recommendation based on User Interests and Points of Interest Visit Durations". In Proceedings of the 24th International Joint Conference on Artificial Intelligence (IJCAI'15). Pg 1778-1784. Jul 2015.
+            
+            2. Kwan Hui Lim, Jeffrey Chan, Christopher Leckie and Shanika Karunasekera. "Towards Next Generation Touring: Personalized Group Tours". In Proceedings of the 26th International Conference on Automated Planning and Scheduling (ICAPS'16). Pg 412-420. Jun 2016.
+            
+            Dataset dapat diunduh di [sini](https://sites.google.com/site/limkwanhui/datacode)
+            """)
+
+            st.header("About Authors")
+            col1, col2 = st.columns(2)
+
             with col1:
-                st.write("userVisits Duplicates:", userVisits.duplicated().sum())
+                st.markdown("""
+                ### Gymnastiar Al Khoarizmy
+                **NIM**: 122450096  
+                
+                [![LinkedIn](https://img.shields.io/badge/LinkedIn-0077B5?style=for-the-badge&logo=linkedin&logoColor=white)](https://www.linkedin.com/in/gymnastiar-al-khoarizmy-0b437b1b5/)
+                [![GitHub](https://img.shields.io/badge/GitHub-100000?style=for-the-badge&logo=github&logoColor=white)](https://github.com/alkhrzmy/)
+                """)
+
             with col2:
-                st.write("poiList Duplicates:", poiList.duplicated().sum())
-            with col3:
-                st.write("costProfCat Duplicates:", costProfCat.duplicated().sum())
-            st.write("Missing userVisits:", userVisits.isnull().sum())
-            st.write("Missing poiList:", poiList.isnull().sum())
-            st.write("Missing costProfCat:", costProfCat.isnull().sum())
-
-            st.write("Preview userVisits:")
-            st.dataframe(userVisits.head())
-            st.write("Preview poiList:")
-            st.dataframe(poiList.head())
-            st.write("Preview costProfCat:")
-            st.dataframe(costProfCat.head())
-
-        elif choice == "Top 10 POI (Plotly)":
-            st.subheader("Plot: Top 10 POI Terpopuler (Plotly)")
-            fig = top_10_popular(userVisits, poiList)
-            st.plotly_chart(fig, use_container_width=True)
-
-        elif choice == "Top 10 POI (Matplotlib)":
-            st.subheader("Plot: Top 10 POI Terpopuler (Matplotlib)")
-            fig = barplot_top_10(userVisits, poiList)
-            st.pyplot(fig)
-
-        elif choice == "Distribusi Tema (Stacked Bar)":
-            st.subheader("Stacked Bar Tema POI")
-            fig = stacked_theme(userVisits, poiList)
-            st.pyplot(fig)
-
-        elif choice == "Heatmap Biaya":
-            st.subheader("Heatmap Biaya Rata-rata per Kategori")
-            fig = heatmap_cost(costProfCat)
-            st.pyplot(fig)
-
-        elif choice == "Scatter Cost-Profit":
-            st.subheader("Scatter Plot Cost vs Profit")
-            fig = scatter_cost_profit(costProfCat)
-            st.pyplot(fig)
-
-        elif choice == "Tren Kunjungan Waktu":
-            st.subheader("Line Chart Tren Kunjungan")
-            fig = line_trend_visits(userVisits)
-            st.pyplot(fig)
-
-        elif choice == "Bar Profit Kategori":
-            st.subheader("Bar Chart Profit Rata-rata per Kategori")
-            fig = bar_profit_category(costProfCat)
-            st.pyplot(fig)
-
-        elif choice == "Map Suatu Kota":
-            st.subheader("Map POI di Suatu Kota")
-            city_list = poiList['cities'].unique()
-            select_city = st.selectbox("Pilih Kota", city_list)
-            fig = map_city(poiList, city=select_city)
-            st.plotly_chart(fig, use_container_width=True)
-
-        elif choice == "Pie Tema di Kota":
-            st.subheader("Pie Chart Tema di Suatu Kota")
-            city_list = userVisits['cities'].unique()
-            select_city = st.selectbox("Pilih Kota", city_list)
-            fig = pie_theme_city(userVisits, city=select_city)
-            st.pyplot(fig)
+                st.markdown("""
+                ### Dea Mutia Risani
+                **NIM**: 122450099
+                """)
 
 if __name__ == "__main__":
     main()
