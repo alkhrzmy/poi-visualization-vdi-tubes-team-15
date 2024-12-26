@@ -301,10 +301,17 @@ def map_city(poiList, userVisits, city='Toro'):  # Tambahkan userVisits sebagai 
     
     # Menambahkan kolom warna berdasarkan tema
     city_poi['color'] = city_poi['theme'].map(theme_colors)
-    city_data = userVisits[userVisits['cities'] == city]
+    
+    # Get visit frequency data
+    city_data = userVisits[userVisits['cities'] == city].copy()
     city_poi_freq = city_data[['poiID', 'poiTheme', 'poiFreq']].drop_duplicates()
+    
     # Menggabungkan city_poi dengan city_poi_freq untuk mendapatkan 'poiFreq'
     city_poi_merged = pd.merge(city_poi, city_poi_freq[['poiID', 'poiFreq']], on='poiID', how='left')
+    city_poi_merged['poiFreq'] = city_poi_merged['poiFreq'].fillna(0)  # Fill NaN with 0
+    
+    # Ensure we use the merged data for text labels
+    city_poi = city_poi_merged.copy()
 
     # Membuat teks label untuk marker dengan informasi frekuensi
     city_poi['text'] = city_poi_merged.apply(
