@@ -516,7 +516,7 @@ def main():
                             POI (Point of Interest) mana yang paling populer di setiap kota berdasarkan frekuensi kunjungan?
 
                             #### Visualisasi: 
-                            Bar chart horizontal untuk setiap kota yang menunjukkan poiName berdasarkan poiFreq.
+                            Bar chart vertikal untuk setiap kota yang menunjukkan poiName berdasarkan poiFreq.
                             """)
             with b:
                 st.write("")
@@ -536,12 +536,51 @@ def main():
             with e:
                 city_select = st.selectbox("Pilih Kota", ['Edin', 'Buda', 'Delh', 'Glas', 'Osak', 'Perth', 'Toro', 'Vien'], help='Pilih kota dengan kode Edin (Edinburgh), Buda (Budapest), Delh (Delhi), Glas (Glasgow), Osak (Osaka), Perth (Perth), Toro (Toronto), Vien (Vienna)')
                 if city_select:
+                    # Define theme colors
+                    theme_colors = {
+                        'Amusement': '#1f77b4',     # Blue
+                        'Architectural': '#ff7f0e',  # Orange  
+                        'Beach': '#2ca02c',         # Green
+                        'Building': '#d62728',      # Red
+                        'Cultural': '#9467bd',      # Purple
+                        'Education': '#8c564b',     # Brown
+                        'Entertainment': '#e377c2',  # Pink
+                        'Historical': '#7f7f7f',    # Gray 
+                        'Museum': '#bcbd22',        # Olive
+                        'Palace': '#17becf',        # Cyan
+                        'Park': '#98df8a',          # Light green
+                        'Precinct': '#ff9896',      # Light red
+                        'Religion': '#c5b0d5',      # Light purple
+                        'Religious': '#c49c94',     # Light brown
+                        'Shopping': '#f7b6d2',      # Light pink
+                        'Sport': '#c7c7c7',         # Light gray
+                        'Structure': '#dbdb8d',     # Light olive
+                        'Transport': '#9edae5',     # Light cyan
+                        'Zoo': '#393b79'            # Dark blue
+                    }
+
                     userVisits_poi = pd.merge(userVisits, poiList, on=['poiID','cities'], how='left')
-                    # Ambil poiFreq
-                    poi_freq = userVisits_poi[['poiID','cities','poiName','poiFreq']].drop_duplicates()
+                    # Get poiFreq and theme
+                    poi_freq = userVisits_poi[['poiID','cities','poiName','poiFreq','theme']].drop_duplicates()
                     city_data = poi_freq[poi_freq['cities'] == city_select].sort_values('poiFreq', ascending=False).head(10)
-                    fig = px.bar(city_data, x='poiFreq', y='poiName', color='poiName', title=f'Top 10 POI Terpopuler di Kota {city_select}')
-                    fig.update_layout(xaxis_title='Frekuensi Kunjungan', yaxis_title='Nama POI', xaxis_tickangle=-45)
+                    
+                    # Create color sequence based on themes
+                    color_sequence = [theme_colors[theme] for theme in city_data['theme']]
+                    
+                    fig = px.bar(city_data, 
+                                x='poiFreq', 
+                                y='poiName',
+                                color='theme',
+                                color_discrete_map=theme_colors,
+                                title=f'Top 10 POI Terpopuler di Kota {city_select}')
+                    
+                    fig.update_layout(
+                        xaxis_title='Frekuensi Kunjungan',
+                        yaxis_title='Nama POI',
+                        xaxis_tickangle=-45,
+                        showlegend=True,
+                        legend_title='Tema POI'
+                    )
                     st.plotly_chart(fig, use_container_width=True)
                     with st.expander("ℹ️ Informasi Grafik", expanded=False):
                         st.markdown(
@@ -550,7 +589,7 @@ def main():
                             POI (Point of Interest) mana yang paling banyak dikunjungi di kota tertentu berdasarkan frekuensi kunjungan?
 
                             #### Visualisasi: 
-                            Bar chart horizontal yang menunjukkan poiName berdasarkan poiFreq di kota tertentu.
+                            Bar chart horizontal yang menunjukkan poiName berdasarkan poiFreq di kota tertentu, dengan warna berdasarkan tema POI.
                             """)
             st.write("")
             st.progress(100, text="")
