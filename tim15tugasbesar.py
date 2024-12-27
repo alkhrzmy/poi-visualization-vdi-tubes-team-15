@@ -872,18 +872,41 @@ def main():
             
             1. Dipetakan ke lokasi POI dan kategori POI tertentu
             2. Dikelompokkan menjadi urutan perjalanan individu (kunjungan POI pengguna berurutan yang berbeda < 8 jam)
+            """)
             
-            #### Deskripsi File dan Statistik Dataset:
+            st.markdown("""
+            ### Struktur Dataset
             
-            Semua kunjungan POI pengguna di setiap kota disimpan dalam satu file csv yang berisi kolom/bidang berikut:
+            Dataset terdiri dari 3 dataframe utama:
             
-            - **photoID**: pengidentifikasi foto berdasarkan Flickr
-            - **userID**: pengidentifikasi pengguna berdasarkan Flickr 
-            - **dateTaken**: tanggal/waktu foto diambil (format timestamp unix)
-            - **poiID**: pengidentifikasi tempat menarik (foto Flickr dipetakan ke POI berdasarkan lat/long mereka)
-            - **poiTheme**: kategori POI (mis., Taman, Museum, Budaya, dll)
-            - **poiFreq**: berapa kali POI ini telah dikunjungi
-            - **seqID**: nomor urut perjalanan (kunjungan POI berurutan oleh pengguna yang sama yang berbeda < 8 jam dikelompokkan sebagai satu urutan perjalanan)
+            #### 1. userVisits
+            Menyimpan data kunjungan user ke POI dengan kolom:
+            - **photoID**: ID foto dari Flickr
+            - **userID**: ID pengguna Flickr
+            - **dateTaken**: Waktu foto diambil (unix timestamp)
+            - **poiID**: ID tempat yang dikunjungi
+            - **poiTheme**: Kategori/tema POI
+            - **poiFreq**: Frekuensi kunjungan ke POI
+            - **seqID**: ID urutan perjalanan
+            - **cities**: Kota lokasi POI
+            
+            #### 2. poiList  
+            Berisi informasi detail POI dengan kolom:
+            - **poiID**: ID unik POI
+            - **lat**: Latitude lokasi
+            - **long**: Longitude lokasi
+            - **poiName**: Nama tempat
+            - **theme**: Kategori/tema tempat
+            - **cities**: Kota lokasi POI
+            
+            #### 3. costProfCat
+            Menyimpan data biaya dan keuntungan dengan kolom:
+            - **from**: ID POI asal
+            - **to**: ID POI tujuan  
+            - **cost**: Biaya perjalanan
+            - **profit**: Keuntungan
+            - **category**: Kategori perjalanan
+            - **cities**: Kota
             """)
 
             st.markdown("""
@@ -897,6 +920,61 @@ def main():
             
             Dataset dapat diunduh di [sini](https://sites.google.com/site/limkwanhui/datacode)
             """)
+            def dataset_summary():
+                # Get dataframes
+                costProfCat, poiList, userVisits = unzip_and_load()
+
+                # Create 3 columns
+                col1, col2, col3 = st.columns(3)
+
+                # Show head of userVisits dataframe 
+                with col1:
+                    st.subheader("Dataset userVisits")
+                    st.dataframe(userVisits.head())
+                    st.markdown("""
+                    #### Key Insights:
+                    - Total {} unique users
+                    - {} total visits recorded
+                    - Date range: {} to {}
+                    """.format(
+                        userVisits['userID'].nunique(),
+                        len(userVisits),
+                        userVisits['dateTaken'].min().strftime('%Y-%m-%d'),
+                        userVisits['dateTaken'].max().strftime('%Y-%m-%d')
+                    ))
+
+                # Show head of poiList dataframe
+                with col2:
+                    st.subheader("Dataset poiList")
+                    st.dataframe(poiList.head()) 
+                    st.markdown("""
+                    #### Key Insights:
+                    - {} total POIs
+                    - {} unique themes
+                    - {} cities covered
+                    """.format(
+                        len(poiList),
+                        poiList['theme'].nunique(),
+                        poiList['cities'].nunique()
+                    ))
+
+                # Show head of costProfCat dataframe
+                with col3:
+                    st.subheader("Dataset costProfCat")
+                    st.dataframe(costProfCat.head())
+                    st.markdown("""
+                    #### Key Insights:
+                    - Average cost: {:.2f}
+                    - Average profit: {:.2f}
+                    - {} unique categories
+                    """.format(
+                        costProfCat['cost'].mean(),
+                        costProfCat['profit'].mean(),
+                        costProfCat['category'].nunique()
+                    ))
+
+            # Call the function to display summaries
+            dataset_summary()
 
             st.header("About Authors")
             col1, col2 = st.columns(2)
